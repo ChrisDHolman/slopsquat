@@ -8,11 +8,21 @@ accuracy bounds every headline number, so it must be verifiable before spending 
 from __future__ import annotations
 
 import collections
+import sys
 from pathlib import Path
 
 import typer
 from rich.console import Console
 from rich.table import Table
+
+# Force UTF-8 on the output streams before rich wraps them. On Windows the default
+# console codepage is cp1252, which crashes on characters like ≥, ×, and • — both in a
+# legacy console and whenever stdout is piped. This keeps output portable.
+for _stream in (sys.stdout, sys.stderr):
+    try:
+        _stream.reconfigure(encoding="utf-8")  # type: ignore[union-attr]
+    except (AttributeError, ValueError):
+        pass
 
 from slopsquat.config import (
     ConfigError,
@@ -596,10 +606,118 @@ def _resolve_existence(run_cfg, out_path, console) -> None:
 
 
 @app.command()
-def report() -> None:
-    """Recurrence analysis and exports. [stage 6]"""
-    console.print("[yellow]not implemented yet — stage 6[/yellow]")
-    raise typer.Exit(1)
+def report(
+    charts: bool = typer.Option(False, help="Also render PNG charts (needs matplotlib)."),
+    top: int = typer.Option(20, help="How many recurring hallucinations to print."),
+) -> None:
+    """Analyse the sweep: hallucination rates and recurrence. Makes no API calls.
+
+    Joins runs.jsonl (what models said) with registry.jsonl (what exists) in DuckDB and
+    writes a Markdown report plus a recurrence CSV.
+    """
+    from slopsquat.report import (
+        ReportError,
+        analyse,
+        render_markdown,
+        write_charts,
+        write_csv,
+    )
+
+    try:
+        run_cfg = load_run_config()
+    except ConfigError as exc:
+        console.print(f"[red]config error:[/red] {exc}")
+        raise typer.Exit(1) from exc
+
+    runs_path = run_cfg.paths["raw"]
+    registry_path = runs_path.parent / "registry.jsonl"
+
+    try:
+        rep = analyse(runs_path, registry_path)
+    except ReportError as exc:
+        console.print(f"[red]{exc}[/red]")
+        raise typer.Exit(1) from exc
+
+    t = rep.totals
+    console.print(
+        f"\n[bold]{t['records']} records[/bold] — {t['ok']} ok, {t['failed']} failed, "
+        f"{t['truncated']} truncated\n"
+    )
+
+    tbl = Table(show_header=True, header_style="bold", title="hallucination rate by model")
+    tbl.add_column("model")
+    tbl.add_column("ok resp", justify="right")
+    tbl.add_column("checkable", justify="right")
+    tbl.add_column("halluc", justify="right")
+    tbl.add_column("mention rate", justify="right")
+    tbl.add_column("distinct", justify="right")
+    tbl.add_column("resp rate", justify="right")
+    for r in rep.per_model:
+        mr = "—" if r["mention_rate"] is None else f"{100 * r['mention_rate']:.1f}%"
+        rr = "—" if r["response_rate"] is None else f"{100 * r['response_rate']:.1f}%"
+        tbl.add_row(
+            r["model_id"], str(r["ok_responses"]), str(r["checkable"]),
+            str(r["halluc_mentions"]), mr, str(r["distinct_halluc"]), rr,
+        )
+    console.print(tbl)
+
+    spec = Table(show_header=True, header_style="bold", title="by specificity (niche inflates)")
+    spec.add_column("specificity")
+    spec.add_column("checkable", justify="right")
+    spec.add_column("halluc", justify="right")
+    spec.add_column("rate", justify="right")
+    for r in rep.by_specificity:
+        mr = "—" if r["mention_rate"] is None else f"{100 * r['mention_rate']:.1f}%"
+        spec.add_row(r["specificity"], str(r["checkable"]), str(r["halluc_mentions"]), mr)
+    console.print(spec)
+
+    rs = rep.recurrence_summary
+    if rs.get("cells"):
+        console.print(
+            f"\n[bold]recurrence:[/bold] {rs['cells']} hallucinated (model, prompt, name) "
+            f"cells — {rs['recurring_2plus']} recurred in ≥2 runs, {rs['every_run']} in "
+            f"[bold]every[/bold] run of their prompt."
+        )
+        rec = Table(show_header=True, header_style="bold", title=f"top {top} recurring")
+        rec.add_column("model")
+        rec.add_column("prompt")
+        rec.add_column("name")
+        rec.add_column("appears", justify="right")
+        rec.add_column("rate", justify="right")
+        rec.add_column("status")
+        for r in rep.recurrence[:top]:
+            rr = "—" if r["recurrence_rate"] is None else f"{100 * r['recurrence_rate']:.0f}%"
+            status = (
+                f"[yellow]{r['status']}[/yellow]" if r["needs_review"] else r["status"]
+            )
+            rec.add_row(
+                r["model_id"], r["prompt_id"], r["name"],
+                f"{r['appearances']}/{r['runs']}", rr, status,
+            )
+        console.print(rec)
+    else:
+        console.print("\n[green]no hallucinations found in checkable mentions.[/green]")
+
+    # Written artefacts.
+    report_path = run_cfg.paths.get("report", runs_path.parent / "report.md")
+    csv_path = run_cfg.paths.get("csv", runs_path.parent / "recurrence.csv")
+    written_charts: list = []
+    if charts:
+        written_charts = write_charts(rep, runs_path.parent / "charts")
+
+    report_path.parent.mkdir(parents=True, exist_ok=True)
+    report_path.write_text(render_markdown(rep), encoding="utf-8")
+    write_csv(rep, csv_path)
+
+    console.print(f"\n[dim]written:[/dim] {report_path}")
+    console.print(f"[dim]written:[/dim] {csv_path}")
+    for p in written_charts:
+        console.print(f"[dim]written:[/dim] {p}")
+
+    if rep.caveats:
+        console.print("\n[yellow]caveats:[/yellow]")
+        for cav in rep.caveats:
+            console.print(f"  • {cav}")
 
 
 if __name__ == "__main__":
