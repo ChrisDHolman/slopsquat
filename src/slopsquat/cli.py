@@ -302,6 +302,109 @@ def check(
 
 
 @app.command()
+def probe(
+    model_id: str = typer.Option(..., "--model", help="Model id from config/models.yaml."),
+    prompt: str = typer.Option(None, help="Prompt text. Overrides --prompt-id."),
+    prompt_id: str = typer.Option(None, help="Use a prompt from the corpus by id."),
+    ecosystem: str = typer.Option(
+        None, help="Ecosystem for extraction. Defaults to the corpus prompt's own."
+    ),
+    show_text: bool = typer.Option(False, "--text", help="Print the full response body."),
+) -> None:
+    """Send ONE prompt to ONE model and show the response, metadata, and extracted names.
+
+    This is the manual verification tool for the model adapters, and it makes exactly one
+    paid API call. Use it to sanity-check a model end to end before committing to a sweep.
+    """
+    from slopsquat.extract import extract as run_extraction
+    from slopsquat.models import complete
+
+    try:
+        models, system_prompt = load_models()
+        aliases = load_aliases()
+        stdlib = {lang: load_stdlib(lang) for lang in ("python", "javascript")}
+    except ConfigError as exc:
+        console.print(f"[red]config error:[/red] {exc}")
+        raise typer.Exit(1) from exc
+
+    model = next((m for m in models if m.id == model_id), None)
+    if model is None:
+        console.print(
+            f"[red]unknown model id[/red] {model_id!r}\n"
+            f"  known: {', '.join(m.id for m in models)}"
+        )
+        raise typer.Exit(1)
+    if not model.key_present():
+        console.print(
+            f"[red]no API key[/red] for {model.provider} "
+            f"(expected {model.env_var} in the environment or .env)"
+        )
+        raise typer.Exit(1)
+
+    # Resolve the prompt: explicit text wins, else a corpus prompt by id.
+    text = prompt
+    eco = ecosystem
+    if text is None:
+        if prompt_id is None:
+            console.print("[red]provide --prompt or --prompt-id[/red]")
+            raise typer.Exit(1)
+        corpus = {p.id: p for p in load_prompts()}
+        chosen = corpus.get(prompt_id)
+        if chosen is None:
+            console.print(f"[red]unknown prompt id[/red] {prompt_id!r}")
+            raise typer.Exit(1)
+        text = chosen.text
+        eco = eco or chosen.ecosystem
+
+    console.print(f"[dim]calling {model.id} ({model.model})…[/dim]")
+    resp = complete(model, system_prompt, text)
+
+    meta = Table(show_header=False, title="model call")
+    meta.add_column("field", style="bold")
+    meta.add_column("value")
+    meta.add_row("ok", "[green]yes[/green]" if resp.ok else "[red]no[/red]")
+    meta.add_row("resolved model", resp.resolved_model or "—")
+    meta.add_row("latency", f"{resp.latency_s:.1f}s")
+    meta.add_row("tokens", f"in={resp.input_tokens}  out={resp.output_tokens}")
+    meta.add_row("stop reason", str(resp.stop_reason))
+    if resp.truncated:
+        meta.add_row("truncated", "[red]YES — response hit max_tokens[/red]")
+    if resp.error:
+        meta.add_row("error", f"[red]{resp.error}[/red]")
+    console.print(meta)
+
+    if not resp.ok:
+        raise typer.Exit(1)
+
+    if resp.truncated:
+        console.print(
+            "\n[yellow]warning:[/yellow] response was truncated — extracted names may be"
+            " incomplete. Raise max_tokens for this model before trusting a sweep."
+        )
+
+    if show_text:
+        console.print("\n[dim]--- response ---[/dim]")
+        console.print(resp.text)
+
+    result = run_extraction(resp.text, ecosystem=eco, stdlib=stdlib, aliases=aliases)
+    if not result.packages:
+        console.print("\n[yellow]no packages extracted[/yellow]")
+        return
+
+    table = Table(show_header=True, header_style="bold", title="extracted names")
+    table.add_column("name")
+    table.add_column("eco")
+    table.add_column("source")
+    for p in result.packages:
+        table.add_row(p.name, p.ecosystem, p.source)
+    console.print(table)
+    console.print(
+        f"\n[dim]{len({p.name for p in result.packages})} unique name(s). "
+        "Run `slopsquat check …` to see which exist.[/dim]"
+    )
+
+
+@app.command()
 def run(
     limit: int = typer.Option(None, help="Only run the first N prompts (smoke test)."),
     dry_run: bool = typer.Option(False, help="Show what would run without calling any API."),
