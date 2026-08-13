@@ -209,10 +209,96 @@ def extract(
 
 
 @app.command()
-def check(names: list[str]) -> None:
-    """Look up package names against PyPI/npm. No LLM calls. [stage 3]"""
-    console.print("[yellow]not implemented yet — stage 3[/yellow]")
-    raise typer.Exit(1)
+def check(
+    names: list[str] = typer.Argument(..., help="Package names to look up."),
+    ecosystem: str = typer.Option("python", help="python | javascript"),
+    refresh: bool = typer.Option(False, help="Ignore cached results and re-query."),
+) -> None:
+    """Look up package names against PyPI or npm. Makes no LLM calls.
+
+    Read-only. A 404 means the registry does not know the name; a timeout or 5xx means
+    we do not know, which is reported as an error and never counted as a negative.
+    """
+    from slopsquat.registry import Status, build_cache, check_names_sync
+
+    if ecosystem not in {"python", "javascript"}:
+        console.print(f"[red]unknown ecosystem[/red] {ecosystem!r}")
+        raise typer.Exit(1)
+
+    try:
+        run = load_run_config()
+        aliases = load_aliases()
+    except ConfigError as exc:
+        console.print(f"[red]config error:[/red] {exc}")
+        raise typer.Exit(1) from exc
+
+    key = "pypi" if ecosystem == "python" else "npm"
+    cache_root = run.paths.get("cache")
+    cache = build_cache(cache_root) if cache_root else None
+
+    results = check_names_sync(
+        list(names),
+        ecosystem,
+        url_template=run.registries[key],
+        user_agent=run.user_agent,
+        cache=cache,
+        concurrency=run.concurrency_registry,
+        delay=run.registry_delay_seconds,
+        retries=run.retries_registry,
+        refresh=refresh,
+    )
+
+    style = {
+        Status.EXISTS: "[green]exists[/green]",
+        Status.NOT_FOUND: "[red]NOT FOUND[/red]",
+        Status.ERROR: "[yellow]error[/yellow]",
+    }
+
+    table = Table(show_header=True, header_style="bold", title=f"{key} lookups")
+    table.add_column("name")
+    table.add_column("status")
+    table.add_column("http")
+    table.add_column("source")
+    table.add_column("detail")
+    for r in results:
+        table.add_row(
+            r.name,
+            style.get(r.status, r.status),
+            str(r.http_status or ""),
+            "cache" if r.from_cache else "live",
+            (r.detail or "")[:60],
+        )
+    console.print(table)
+
+    missing = [r for r in results if r.status == Status.NOT_FOUND]
+    errors = [r for r in results if r.status == Status.ERROR]
+
+    console.print(
+        f"\n[bold]{len(missing)}[/bold] not found · "
+        f"{len(results) - len(missing) - len(errors)} exist · "
+        f"{len(errors)} undetermined"
+    )
+
+    if errors:
+        console.print(
+            "\n[yellow]undetermined results are NOT hallucinations.[/yellow]\n"
+            "  They were not cached and will be retried on the next run."
+        )
+
+    # The genuinely ambiguous case, promised at stage 2: a Python import name that is
+    # absent from the alias table AND 404s. It is either a real hallucination or a
+    # legitimate package whose distribution name simply is not mapped yet. Only a human
+    # can tell, so it is surfaced rather than silently counted.
+    if ecosystem == "python" and missing:
+        ambiguous = [r.name for r in missing if r.name not in aliases.values()]
+        if ambiguous:
+            console.print(
+                f"\n[yellow]needs review ({len(ambiguous)}):[/yellow] "
+                f"{', '.join(ambiguous)}"
+                "\n  Absent from PyPI and not in the alias table. Confirm each is genuinely"
+                "\n  invented rather than a real project with a differing distribution name"
+                "\n  before counting it as a hallucination."
+            )
 
 
 @app.command()

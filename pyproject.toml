@@ -46,3 +46,6 @@ select = ["E", "F", "I", "UP", "B"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+# Run the suite without installing the package first, so `pytest` works from a bare
+# checkout as well as from an editable install.
+pythonpath = ["src"]
