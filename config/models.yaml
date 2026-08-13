@@ -43,22 +43,29 @@ models:
   - id: anthropic/haiku-4-5
     provider: anthropic
     model: claude-haiku-4-5
-    enabled: false          # enable for a cheap cross-tier comparison
+    enabled: true           # third Anthropic tier for a cheap cross-tier comparison
     params:
       max_tokens: 8192
 
   # ---- OpenAI ------------------------------------------------------------------
+  # Disabled until the OpenAI account is funded. The free trial is exhausted
+  # (insufficient_quota), and GitHub Models — the free API alternative — is mid-
+  # retirement (HTTP 410). These slot straight back into a sweep by flipping `enabled`
+  # to true once credits exist; the pipeline is provider-agnostic and needs no rework.
+  # The gpt-5 vs gpt-5-codex comparison (does code-specialisation reduce package
+  # hallucination?) is the most novel axis in the corpus and is worth funding for the
+  # final run.
   - id: openai/gpt-5
     provider: openai
     model: gpt-5
-    enabled: true
+    enabled: false
     params:
       max_tokens: 8192
 
   - id: openai/gpt-5-mini
     provider: openai
     model: gpt-5-mini
-    enabled: true
+    enabled: false
     params:
       max_tokens: 8192
 
@@ -69,7 +76,7 @@ models:
   - id: openai/gpt-5-codex
     provider: openai
     model: gpt-5-codex
-    enabled: true
+    enabled: false
     params:
       max_tokens: 8192
 

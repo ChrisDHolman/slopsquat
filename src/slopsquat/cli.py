@@ -406,12 +406,193 @@ def probe(
 
 @app.command()
 def run(
-    limit: int = typer.Option(None, help="Only run the first N prompts (smoke test)."),
+    limit: int = typer.Option(None, help="Only use the first N prompts (smoke test)."),
+    runs: int = typer.Option(None, help="Override runs_per_prompt (e.g. a cheap first pass)."),
+    model_id: str = typer.Option(
+        None, "--model", help="Restrict the sweep to one model id."
+    ),
     dry_run: bool = typer.Option(False, help="Show what would run without calling any API."),
+    yes: bool = typer.Option(False, "--yes", "-y", help="Skip the spend confirmation."),
+    skip_existence: bool = typer.Option(
+        False, help="Run the model sweep only; don't resolve registry existence."
+    ),
 ) -> None:
-    """Execute the full pipeline. [stage 5]"""
-    console.print("[yellow]not implemented yet — stage 5[/yellow]")
-    raise typer.Exit(1)
+    """Execute the sweep: every enabled model × prompt × run, recorded to runs.jsonl.
+
+    Resumable — re-running continues where an interrupted sweep left off, skipping calls
+    already recorded as successful and retrying failed ones. This command spends money.
+    """
+    from slopsquat.pipeline import build_tasks, load_completed, now_run_id, run_sweep
+
+    try:
+        models, system_prompt = load_models()
+        run_cfg = load_run_config()
+        prompts = load_prompts(run_cfg.ecosystems)
+        aliases = load_aliases()
+        stdlib = {lang: load_stdlib(lang) for lang in ("python", "javascript")}
+    except ConfigError as exc:
+        console.print(f"[red]config error:[/red] {exc}")
+        raise typer.Exit(1) from exc
+
+    if model_id:
+        models = [m for m in models if m.id == model_id]
+        if not models:
+            console.print(f"[red]unknown model id[/red] {model_id!r}")
+            raise typer.Exit(1)
+
+    enabled = [m for m in models if m.enabled]
+    missing_key = [m.id for m in enabled if not m.key_present()]
+    if missing_key:
+        console.print(f"[red]enabled models with no API key:[/red] {', '.join(missing_key)}")
+        raise typer.Exit(1)
+    if not enabled:
+        console.print("[yellow]no enabled models — nothing to do[/yellow]")
+        raise typer.Exit(1)
+
+    if limit:
+        prompts = prompts[:limit]
+    runs_per_prompt = runs if runs is not None else run_cfg.runs_per_prompt
+
+    tasks = build_tasks(enabled, prompts, runs_per_prompt)
+    out_path = run_cfg.paths["raw"]
+    completed = load_completed(out_path)
+    pending = [t for t in tasks if t.key not in completed]
+
+    console.print(
+        f"\n[bold]sweep plan[/bold]\n"
+        f"  models:   {', '.join(m.id for m in enabled)}\n"
+        f"  prompts:  {len(prompts)}\n"
+        f"  runs:     {runs_per_prompt} per (prompt, model)\n"
+        f"  total:    {len(tasks)} calls\n"
+        f"  already done: {len(completed & {t.key for t in tasks})}\n"
+        f"  [bold]to run now: {len(pending)}[/bold]\n"
+        f"  output:   {out_path}"
+    )
+
+    if dry_run:
+        console.print("\n[dim]dry run — no API calls made[/dim]")
+        return
+    if not pending:
+        console.print("\n[green]nothing pending — sweep already complete[/green]")
+        if not skip_existence:
+            _resolve_existence(run_cfg, out_path, console)
+        return
+
+    if not yes:
+        console.print(
+            "\n[yellow]this will make paid API calls.[/yellow] "
+            "Re-run with [bold]--yes[/bold] to proceed, or --dry-run to inspect."
+        )
+        raise typer.Exit(1)
+
+    run_id = now_run_id()
+    from rich.progress import (
+        BarColumn,
+        MofNCompleteColumn,
+        Progress,
+        TextColumn,
+        TimeElapsedColumn,
+    )
+
+    counters = {"ok": 0, "failed": 0, "trunc": 0}
+    with Progress(
+        TextColumn("[progress.description]{task.description}"),
+        BarColumn(),
+        MofNCompleteColumn(),
+        TimeElapsedColumn(),
+        console=console,
+    ) as progress:
+        bar = progress.add_task("sweeping", total=len(pending))
+
+        def on_record(rec: dict) -> None:
+            if rec.get("ok"):
+                counters["ok"] += 1
+            else:
+                counters["failed"] += 1
+            if rec.get("truncated"):
+                counters["trunc"] += 1
+            progress.update(
+                bar,
+                advance=1,
+                description=f"sweeping (ok={counters['ok']} fail={counters['failed']})",
+            )
+
+        summary = run_sweep(
+            tasks,
+            system_prompt,
+            stdlib,
+            aliases,
+            out_path=out_path,
+            run_id=run_id,
+            concurrency=run_cfg.concurrency_models,
+            retries=run_cfg.retries_model,
+            completed=completed,
+            progress=on_record,
+        )
+
+    console.print(
+        f"\n[bold]sweep complete[/bold] — attempted {summary.attempted}, "
+        f"[green]{summary.ok} ok[/green], "
+        f"{'[red]' if summary.failed else ''}{summary.failed} failed"
+        f"{'[/red]' if summary.failed else ''}, "
+        f"{summary.truncated} truncated"
+    )
+    if summary.failed:
+        console.print(
+            "[dim]failed calls are recorded but excluded from results. Re-run this "
+            "command to retry them.[/dim]"
+        )
+    if summary.truncated:
+        console.print(
+            "[yellow]some responses were truncated[/yellow] — their package lists may be "
+            "incomplete. Consider raising max_tokens and re-running those cells."
+        )
+
+    if not skip_existence:
+        _resolve_existence(run_cfg, out_path, console)
+
+
+def _resolve_existence(run_cfg, out_path, console) -> None:
+    """Resolve registry existence for every extracted name into a timestamped snapshot."""
+    from slopsquat.pipeline import collect_unique_names, write_existence_snapshot
+    from slopsquat.registry import build_cache
+
+    names_by_eco = collect_unique_names(out_path)
+    total = sum(len(v) for v in names_by_eco.values())
+    if not total:
+        console.print("\n[dim]no names extracted — skipping existence check[/dim]")
+        return
+
+    snapshot_path = out_path.parent / "registry.jsonl"
+    cache_root = run_cfg.paths.get("cache")
+    cache = build_cache(cache_root) if cache_root else None
+
+    console.print(f"\n[dim]resolving existence for {total} unique name(s)…[/dim]")
+    records = write_existence_snapshot(
+        names_by_eco,
+        snapshot_path,
+        registries=run_cfg.registries,
+        user_agent=run_cfg.user_agent,
+        cache=cache,
+        concurrency=run_cfg.concurrency_registry,
+        delay=run_cfg.registry_delay_seconds,
+        retries=run_cfg.retries_registry,
+    )
+
+    from collections import Counter
+
+    by_status = Counter(r["status"] for r in records)
+    console.print(
+        f"[bold]existence snapshot[/bold] → {snapshot_path}\n"
+        f"  exists={by_status.get('exists', 0)}  "
+        f"not_found={by_status.get('not_found', 0)}  "
+        f"error={by_status.get('error', 0)}"
+    )
+    if by_status.get("error"):
+        console.print(
+            "[yellow]some names are undetermined (network error).[/yellow] They are NOT "
+            "counted as hallucinations. Re-run to resolve them."
+        )
 
 
 @app.command()
