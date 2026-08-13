@@ -93,7 +93,18 @@ Stated plainly, because they bound the headline numbers:
 
 - **Extraction accuracy bounds everything.** A package the extractor misses is a false
   negative; a string it wrongly treats as a package is a false positive. Extraction has
-  tests and a fixture corpus for this reason, and known gaps are documented.
+  tests and a fixture corpus for this reason. Three known gaps, all deliberate:
+  - **Bare prose recommendations are not counted.** A model writing *"use
+    `retry-requests-plus`, it handles backoff nicely"* — with no install command — is
+    arguably a hallucination a developer would act on, but counting every backticked
+    name in prose would sweep up frameworks, tools, and concepts. Only install commands
+    are read from prose. This **understates** the true rate.
+  - **Locally-defined modules are only detected when annotated.** A response that writes
+    `utils.py` with a `# file:` comment or a `python:utils.py` fence tag is filtered; one
+    that defines it implicitly is not, so `import utils` would be checked as a package.
+    This **overstates** the rate.
+  - **Untagged code fences are skipped when the language is ambiguous.** Guessing wrong
+    sends a name to the wrong registry, so ambiguity means skip. This **understates**.
 - **Results are a snapshot.** Model versions change. Claims are scoped to the recorded
   version and date.
 - **Prompt design influences rates.** Prompts that nudge toward niche libraries produce

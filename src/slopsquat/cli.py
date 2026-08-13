@@ -132,11 +132,76 @@ def config() -> None:
 @app.command()
 def extract(
     file: Path = typer.Option(..., exists=True, help="File containing a model response."),
-    language: str = typer.Option(None, help="python | javascript. Inferred if omitted."),
+    ecosystem: str = typer.Option(
+        None, help="python | javascript. Both are scanned if omitted."
+    ),
+    show_filtered: bool = typer.Option(
+        True, "--filtered/--no-filtered", help="Show what was excluded, and why."
+    ),
 ) -> None:
-    """Extract package names from a saved response. No API calls. [stage 2]"""
-    console.print("[yellow]not implemented yet — stage 2[/yellow]")
-    raise typer.Exit(1)
+    """Extract package names from a saved response. Makes no API calls.
+
+    Run this against real responses before committing to a sweep: extraction accuracy
+    bounds every number the study reports, so it should be inspected, not trusted.
+    """
+    from slopsquat.extract import extract as run_extraction
+
+    if ecosystem and ecosystem not in {"python", "javascript"}:
+        console.print(f"[red]unknown ecosystem[/red] {ecosystem!r}")
+        raise typer.Exit(1)
+
+    try:
+        stdlib = {lang: load_stdlib(lang) for lang in ("python", "javascript")}
+        aliases = load_aliases()
+    except ConfigError as exc:
+        console.print(f"[red]config error:[/red] {exc}")
+        raise typer.Exit(1) from exc
+
+    text = file.read_text(encoding="utf-8", errors="replace")
+    result = run_extraction(text, ecosystem=ecosystem, stdlib=stdlib, aliases=aliases)
+
+    if not result.packages:
+        console.print("[yellow]no packages extracted[/yellow]")
+    else:
+        table = Table(show_header=True, header_style="bold", title="extracted")
+        table.add_column("name")
+        table.add_column("raw")
+        table.add_column("eco")
+        table.add_column("source")
+        table.add_column("origin")
+        table.add_column("alias")
+        for p in result.packages:
+            alias = {True: "resolved", False: "[yellow]unmapped[/yellow]", None: ""}[
+                p.alias_resolved
+            ]
+            origin = p.origin if p.origin == "code_block" else f"[yellow]{p.origin}[/yellow]"
+            table.add_row(p.name, p.raw, p.ecosystem, p.source, origin, alias)
+        console.print(table)
+
+        unique = len({p.name for p in result.packages})
+        console.print(f"\n[bold]{unique}[/bold] unique package name(s) to check")
+
+    if show_filtered and result.filtered:
+        console.print("\n[dim]filtered (not sent to any registry):[/dim]")
+        for reason, items in sorted(result.filtered.items()):
+            console.print(f"  [dim]{reason}:[/dim] {', '.join(sorted(items))}")
+
+    for note in result.notes:
+        console.print(f"\n[yellow]note:[/yellow] {note}")
+
+    # An unmapped import name is checked against PyPI as-is, which is correct but is
+    # also how a legitimate package can look like a hallucination. Surface it so the
+    # alias table can be extended deliberately.
+    unmapped = sorted({p.raw for p in result.packages if p.alias_resolved is False})
+    if unmapped:
+        console.print(
+            f"\n[dim]unmapped python import names ({len(unmapped)}): "
+            f"{', '.join(unmapped)}[/dim]"
+            "\n[dim]  Expected for most packages — import name and distribution name are"
+            "\n  usually identical. Only an unmapped name that ALSO 404s at the registry"
+            "\n  needs review, since that is ambiguous between a hallucination and a"
+            "\n  missing alias. Stage 3 flags that combination.[/dim]"
+        )
 
 
 @app.command()
