@@ -23,6 +23,25 @@ VALID_SPECIFICITY = {"vague", "detailed", "niche"}
 VALID_PROVIDERS = {"anthropic", "openai"}
 
 
+def load_env(path: Path | None = None) -> bool:
+    """Load API keys from .env into the environment.
+
+    Called from the CLI rather than at import time: importing a library should not
+    silently mutate the environment, and tests must not pick up a developer's real keys.
+
+    Returns True if a .env file was found and read.
+    """
+    from dotenv import load_dotenv
+
+    env_path = path or REPO_ROOT / ".env"
+    if not env_path.exists():
+        return False
+    # override=False so an explicitly exported variable always wins over the file —
+    # otherwise a stale .env silently shadows the key you just set for one run.
+    load_dotenv(env_path, override=False)
+    return True
+
+
 class ConfigError(Exception):
     """Raised when configuration or corpus data is invalid."""
 

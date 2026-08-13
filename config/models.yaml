@@ -3,24 +3,25 @@
 # `id` is a stable key used to slice results — keep it constant across runs even if the
 # underlying model alias moves, so historical records stay comparable.
 #
-# `model` is the alias sent to the provider. Aliases drift; the harness records the
-# RESOLVED version the API reports back on every call, and that resolved value is what
-# any published claim should cite.
+# `model` is the alias sent to the provider. Aliases are used deliberately: they are
+# what a developer gets when they don't think about versioning, which is the condition
+# this study is about. The harness records the RESOLVED version the API reports back on
+# every call, so reproducibility is preserved without pinning — and any published claim
+# should cite that recorded version, not the alias.
 #
-# `params` are an experimental axis, not a hidden constant. Thinking and effort change
-# how much the model reasons before answering, which plausibly changes hallucination
-# rate — that is a finding, so it is configured explicitly and stored per-record.
+# `params` are an experimental axis, not a hidden constant. Reasoning depth plausibly
+# changes hallucination rate, so it is configured explicitly and stored per-record.
 
 models:
+  # ---- Anthropic ---------------------------------------------------------------
   - id: anthropic/opus-5
     provider: anthropic
     model: claude-opus-5
     enabled: true
     params:
       max_tokens: 4096
-      # Opus 5 thinks by default. "adaptive" is the default behaviour made explicit;
-      # set to "disabled" to measure the no-reasoning condition (allowed only at
-      # effort high or below).
+      # Opus 5 thinks by default; "adaptive" states that explicitly. Set to "disabled"
+      # (allowed only at effort high or below) to measure the no-reasoning condition.
       thinking: adaptive
       effort: high
 
@@ -40,12 +41,29 @@ models:
     params:
       max_tokens: 4096
 
-  # TODO(chris): set the OpenAI model id you want to compare against.
-  # Left disabled so a full sweep cannot silently fail on an unset model.
-  - id: openai/primary
+  # ---- OpenAI ------------------------------------------------------------------
+  - id: openai/gpt-5
     provider: openai
-    model: CHANGEME
-    enabled: false
+    model: gpt-5
+    enabled: true
+    params:
+      max_tokens: 4096
+
+  - id: openai/gpt-5-mini
+    provider: openai
+    model: gpt-5-mini
+    enabled: true
+    params:
+      max_tokens: 4096
+
+  # Coding-specialised sibling of gpt-5. The comparison against openai/gpt-5 asks
+  # whether tuning a model for code reduces package hallucination — a question with no
+  # published answer, and the most novel axis in this corpus. Keep params identical to
+  # openai/gpt-5 so the specialisation is the only variable.
+  - id: openai/gpt-5-codex
+    provider: openai
+    model: gpt-5-codex
+    enabled: true
     params:
       max_tokens: 4096
 

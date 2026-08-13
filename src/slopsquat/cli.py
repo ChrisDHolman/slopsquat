@@ -16,12 +16,16 @@ from rich.table import Table
 
 from slopsquat.config import (
     ConfigError,
+    load_env,
     load_aliases,
     load_models,
     load_prompts,
     load_run_config,
     load_stdlib,
 )
+
+# Load .env before any command inspects the environment for API keys.
+load_env()
 
 app = typer.Typer(
     add_completion=False,
