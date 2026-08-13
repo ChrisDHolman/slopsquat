@@ -1,0 +1,58 @@
+# Node.js built-in module names.
+#
+# Hand-curated from the Node documentation. Both bare (`fs`) and prefixed (`node:fs`)
+# forms occur in generated code; the extractor strips a leading `node:` before
+# comparing, so only the bare names are listed here.
+#
+# Anything listed here is ignored by the extractor - it is not an npm package.
+#
+# Note: some of these ALSO exist as real npm packages (e.g. `punycode`, `querystring`,
+# `assert`, `events`, `path`, `util`, `buffer`), usually as browser polyfills. Treating
+# them as built-ins is the right call for hallucination measurement - a model writing
+# `require('path')` means the built-in, not the polyfill - but it is a documented
+# extraction decision, not an accident.
+
+assert
+async_hooks
+buffer
+child_process
+cluster
+console
+constants
+crypto
+dgram
+diagnostics_channel
+dns
+domain
+events
+fs
+http
+http2
+https
+inspector
+module
+net
+os
+path
+perf_hooks
+process
+punycode
+querystring
+readline
+repl
+sea
+stream
+string_decoder
+sys
+test
+timers
+tls
+trace_events
+tty
+url
+util
+v8
+vm
+wasi
+worker_threads
+zlib

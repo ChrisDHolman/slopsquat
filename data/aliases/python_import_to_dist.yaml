@@ -1,0 +1,100 @@
+# Python import name -> PyPI distribution name.
+#
+# Python's import name and its PyPI package name frequently differ. `import cv2` is
+# satisfied by `pip install opencv-python`. Checking "cv2" against PyPI would return
+# 404 and be recorded as a hallucination - a false positive that would inflate the
+# headline number.
+#
+# This table is therefore load-bearing for correctness, not a convenience.
+#
+# RULE: when an import name is not in this table and not in the stdlib list, the
+# extractor checks the import name as-is and marks the record `alias_resolved: false`.
+# It NEVER guesses a distribution name by transformation (e.g. adding "python-"),
+# because a wrong guess silently converts a real hallucination into a "resolved"
+# package or vice versa. Unresolved names are reported so this table can be extended
+# deliberately.
+
+aliases:
+  # Imaging / vision
+  cv2: opencv-python
+  PIL: pillow
+  skimage: scikit-image
+
+  # Scientific / ML
+  sklearn: scikit-learn
+  torch: torch
+  torchvision: torchvision
+  tensorflow: tensorflow
+  cupy: cupy
+  faiss: faiss-cpu
+
+  # Serialisation / config
+  yaml: pyyaml
+  toml: toml
+  dotenv: python-dotenv
+  ujson: ujson
+  orjson: orjson
+  msgpack: msgpack
+
+  # Web / HTTP
+  bs4: beautifulsoup4
+  lxml: lxml
+  httpx: httpx
+  requests_oauthlib: requests-oauthlib
+  jwt: pyjwt
+  jose: python-jose
+  flask_cors: flask-cors
+  flask_sqlalchemy: flask-sqlalchemy
+  flask_login: flask-login
+
+  # Databases / drivers
+  psycopg2: psycopg2-binary
+  psycopg: psycopg
+  MySQLdb: mysqlclient
+  pymongo: pymongo
+  redis: redis
+  sqlalchemy: sqlalchemy
+
+  # Cloud / infra
+  boto3: boto3
+  botocore: botocore
+  google: google-api-python-client
+  azure: azure-core
+  kubernetes: kubernetes
+
+  # Crypto / security
+  Crypto: pycryptodome
+  Cryptodome: pycryptodomex
+  nacl: pynacl
+  OpenSSL: pyopenssl
+  magic: python-magic
+
+  # Dates / parsing
+  dateutil: python-dateutil
+  pytz: pytz
+
+  # Terminal / CLI
+  rich: rich
+  click: click
+  typer: typer
+  colorama: colorama
+  tqdm: tqdm
+
+  # Testing
+  pytest: pytest
+  hypothesis: hypothesis
+
+  # Misc frequently-diverging
+  attr: attrs
+  pkg_resources: setuptools
+  setuptools: setuptools
+  serial: pyserial
+  usb: pyusb
+  win32api: pywin32
+  win32com: pywin32
+  gi: pygobject
+  Xlib: python-xlib
+  slugify: python-slugify
+  docx: python-docx
+  pptx: python-pptx
+  fitz: pymupdf

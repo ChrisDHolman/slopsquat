@@ -1,0 +1,56 @@
+# Models under test.
+#
+# `id` is a stable key used to slice results — keep it constant across runs even if the
+# underlying model alias moves, so historical records stay comparable.
+#
+# `model` is the alias sent to the provider. Aliases drift; the harness records the
+# RESOLVED version the API reports back on every call, and that resolved value is what
+# any published claim should cite.
+#
+# `params` are an experimental axis, not a hidden constant. Thinking and effort change
+# how much the model reasons before answering, which plausibly changes hallucination
+# rate — that is a finding, so it is configured explicitly and stored per-record.
+
+models:
+  - id: anthropic/opus-5
+    provider: anthropic
+    model: claude-opus-5
+    enabled: true
+    params:
+      max_tokens: 4096
+      # Opus 5 thinks by default. "adaptive" is the default behaviour made explicit;
+      # set to "disabled" to measure the no-reasoning condition (allowed only at
+      # effort high or below).
+      thinking: adaptive
+      effort: high
+
+  - id: anthropic/sonnet-5
+    provider: anthropic
+    model: claude-sonnet-5
+    enabled: true
+    params:
+      max_tokens: 4096
+      thinking: adaptive
+      effort: high
+
+  - id: anthropic/haiku-4-5
+    provider: anthropic
+    model: claude-haiku-4-5
+    enabled: false          # enable for a cheap cross-tier comparison
+    params:
+      max_tokens: 4096
+
+  # TODO(chris): set the OpenAI model id you want to compare against.
+  # Left disabled so a full sweep cannot silently fail on an unset model.
+  - id: openai/primary
+    provider: openai
+    model: CHANGEME
+    enabled: false
+    params:
+      max_tokens: 4096
+
+# Sent as the system prompt to every model. Deliberately neutral: it must not nudge
+# toward or away from naming dependencies, or it becomes a confound.
+system_prompt: |
+  You are helping a developer with a coding task. Answer as you normally would,
+  including any code you think is useful.

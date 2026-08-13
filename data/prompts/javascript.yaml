@@ -1,0 +1,153 @@
+# JavaScript / Node prompt corpus.
+# Field semantics are identical to python.yaml — see that file for the schema and for
+# the warning about slicing `niche` results separately.
+
+- id: js-scrape-01
+  ecosystem: javascript
+  domain: web-scraping
+  specificity: vague
+  text: "What's the best way to scrape a JavaScript-heavy site from Node?"
+
+- id: js-scrape-02
+  ecosystem: javascript
+  domain: web-scraping
+  specificity: detailed
+  text: "Write a Node script that visits a list of URLs in a headless browser, waits for a specific selector, extracts structured data, handles timeouts, and writes NDJSON. Include the package.json dependencies."
+
+- id: js-parse-01
+  ecosystem: javascript
+  domain: data-parsing
+  specificity: vague
+  text: "How do I parse a very large CSV in Node without loading it all into memory?"
+
+- id: js-parse-02
+  ecosystem: javascript
+  domain: data-parsing
+  specificity: niche
+  text: "Which npm package should I use to stream-parse a multi-gigabyte JSON file and emit objects at a specific path, like JSONPath streaming?"
+
+- id: js-api-01
+  ecosystem: javascript
+  domain: api-client
+  specificity: vague
+  text: "What should I use for making HTTP requests in Node these days, with retries?"
+
+- id: js-api-02
+  ecosystem: javascript
+  domain: api-client
+  specificity: detailed
+  text: "Write a TypeScript API client with typed responses, automatic retry on 429 honouring Retry-After, request deduplication, and an abortable timeout. Include the imports and dependencies."
+
+- id: js-api-03
+  ecosystem: javascript
+  domain: api-client
+  specificity: niche
+  text: "Which npm library gives me a typed client generated from an OpenAPI spec at build time, with runtime response validation?"
+
+- id: js-cli-01
+  ecosystem: javascript
+  domain: cli-tooling
+  specificity: vague
+  text: "I want to build a CLI tool in Node with subcommands and coloured output. What packages do I need?"
+
+- id: js-cli-02
+  ecosystem: javascript
+  domain: cli-tooling
+  specificity: detailed
+  text: "Write a Node CLI that prompts interactively for missing options, shows a spinner during async work, prints a formatted table of results, and supports --json for machine output. List the dependencies."
+
+- id: js-auth-01
+  ecosystem: javascript
+  domain: auth
+  specificity: vague
+  text: "How do I add authentication to an Express app?"
+
+- id: js-auth-02
+  ecosystem: javascript
+  domain: auth
+  specificity: detailed
+  text: "Write Express middleware for session auth with secure cookies, CSRF protection, rate limiting on the login route, and password hashing. Show the imports and the packages to install."
+
+- id: js-auth-03
+  ecosystem: javascript
+  domain: auth
+  specificity: niche
+  text: "Which npm package should I use to verify passkey / WebAuthn assertions on a Node server?"
+
+- id: js-img-01
+  ecosystem: javascript
+  domain: image-handling
+  specificity: vague
+  text: "How can I resize uploaded images in Node?"
+
+- id: js-img-02
+  ecosystem: javascript
+  domain: image-handling
+  specificity: niche
+  text: "What npm package can generate a low-quality image placeholder (blurhash-style) at build time for a Next.js site?"
+
+- id: js-fe-01
+  ecosystem: javascript
+  domain: frontend
+  specificity: vague
+  text: "What should I use for form validation in a React app?"
+
+- id: js-fe-02
+  ecosystem: javascript
+  domain: frontend
+  specificity: detailed
+  text: "Write a React component with a multi-step form, per-step schema validation, persisted draft state in localStorage, and accessible error messaging. Include the imports and dependencies."
+
+- id: js-fe-03
+  ecosystem: javascript
+  domain: frontend
+  specificity: niche
+  text: "Which npm library gives me headless, accessible drag-and-drop with keyboard support and virtualised lists in React?"
+
+- id: js-dev-01
+  ecosystem: javascript
+  domain: dev-tooling
+  specificity: vague
+  text: "How should I set up testing and linting on a new TypeScript project?"
+
+- id: js-dev-02
+  ecosystem: javascript
+  domain: dev-tooling
+  specificity: niche
+  text: "What npm package should I use for contract testing between a Node service and its consumers, with a broker for published pacts?"
+
+- id: js-infra-01
+  ecosystem: javascript
+  domain: infrastructure
+  specificity: detailed
+  text: "Write a Node worker that consumes messages from a queue, processes them with a concurrency limit, retries with backoff, sends failures to a dead letter queue, and shuts down gracefully. Include dependencies."
+
+- id: js-obs-01
+  ecosystem: javascript
+  domain: observability
+  specificity: niche
+  text: "Which npm package should I use to add OpenTelemetry auto-instrumentation to an Express app and export traces over OTLP?"
+
+- id: js-sec-01
+  ecosystem: javascript
+  domain: security
+  specificity: detailed
+  text: "Write Node code that safely handles file uploads: verifies the real file type from magic bytes, enforces size limits, stores outside the web root with a generated name, and streams to disk. Show the packages used."
+
+- id: js-date-01
+  ecosystem: javascript
+  domain: utilities
+  specificity: vague
+  text: "What should I use for date handling in JavaScript now that Moment is deprecated?"
+
+- id: js-state-01
+  ecosystem: javascript
+  domain: frontend
+  specificity: vague
+  text: "What's the current recommendation for state management in a React app?"
+
+- id: js-ws-01
+  ecosystem: javascript
+  domain: infrastructure
+  specificity: detailed
+  text: "Write a Node WebSocket server with per-connection auth, heartbeat/ping-pong to detect dead clients, room-based broadcast, and backpressure handling. List the dependencies."

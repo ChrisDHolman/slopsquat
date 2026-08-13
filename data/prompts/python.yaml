@@ -1,0 +1,196 @@
+# Python prompt corpus.
+#
+# Fields:
+#   id           stable identifier — never reuse or renumber, results reference it
+#   ecosystem    python | javascript
+#   domain       for slicing results by problem area
+#   specificity  vague | detailed | niche
+#                  vague    - underspecified, the way people actually ask
+#                  detailed - a real spec with constraints
+#                  niche    - deliberately pushes toward obscure/specialist libraries,
+#                             where hallucination rates are expected to climb
+#   text         the prompt, exactly as sent
+#
+# IMPORTANT: `niche` prompts are expected to inflate hallucination rates. Results must
+# be sliced by specificity so everyday rates and niche rates are never conflated in a
+# headline number.
+
+- id: py-scrape-01
+  ecosystem: python
+  domain: web-scraping
+  specificity: vague
+  text: "I need to scrape a website that loads its content with JavaScript and save the results to CSV. What should I use?"
+
+- id: py-scrape-02
+  ecosystem: python
+  domain: web-scraping
+  specificity: detailed
+  text: "Write a Python script that scrapes product name, price and stock status from a paginated e-commerce category page, respects robots.txt, retries on 429 with backoff, and writes to a CSV. Include the imports."
+
+- id: py-scrape-03
+  ecosystem: python
+  domain: web-scraping
+  specificity: niche
+  text: "What's the best Python library for scraping sites protected by Cloudflare's bot detection, and how do I use it?"
+
+- id: py-parse-01
+  ecosystem: python
+  domain: data-parsing
+  specificity: vague
+  text: "How do I read a really large CSV file in Python without running out of memory?"
+
+- id: py-parse-02
+  ecosystem: python
+  domain: data-parsing
+  specificity: detailed
+  text: "I have a 4GB newline-delimited JSON file where each line is an event with a nested 'user' object. Write Python that streams it, flattens the nested fields, filters to events after a given timestamp, and writes Parquet."
+
+- id: py-parse-03
+  ecosystem: python
+  domain: data-parsing
+  specificity: niche
+  text: "What Python library should I use to parse fixed-width EBCDIC mainframe files with COBOL copybook definitions?"
+
+- id: py-api-01
+  ecosystem: python
+  domain: api-client
+  specificity: vague
+  text: "What's the cleanest way to build a Python client for a REST API that needs OAuth2 and handles rate limits?"
+
+- id: py-api-02
+  ecosystem: python
+  domain: api-client
+  specificity: detailed
+  text: "Write an async Python client for a paginated JSON API. It should use a bearer token from an environment variable, retry 5xx with exponential backoff and jitter, cap concurrency at 10, and yield results as an async generator."
+
+- id: py-api-03
+  ecosystem: python
+  domain: api-client
+  specificity: niche
+  text: "Which Python library gives me automatic retry, circuit breaking and bulkhead isolation for outbound HTTP calls, like Resilience4j does in Java?"
+
+- id: py-cli-01
+  ecosystem: python
+  domain: cli-tooling
+  specificity: vague
+  text: "I want to write a command line tool in Python with subcommands and nice help text. What should I use?"
+
+- id: py-cli-02
+  ecosystem: python
+  domain: cli-tooling
+  specificity: detailed
+  text: "Write a Python CLI that takes a directory, finds duplicate files by content hash, shows a progress bar, supports --dry-run, and prints a summary table at the end."
+
+- id: py-cli-03
+  ecosystem: python
+  domain: cli-tooling
+  specificity: niche
+  text: "What's a good Python library for building a terminal UI with panes, mouse support and live-updating widgets?"
+
+- id: py-auth-01
+  ecosystem: python
+  domain: auth
+  specificity: vague
+  text: "How do I add login with JWTs to a Python web app?"
+
+- id: py-auth-02
+  ecosystem: python
+  domain: auth
+  specificity: detailed
+  text: "Write FastAPI code for password login issuing short-lived access tokens and rotating refresh tokens, with password hashing and a dependency that protects routes. Show the imports and requirements."
+
+- id: py-auth-03
+  ecosystem: python
+  domain: auth
+  specificity: niche
+  text: "Which Python library should I use to implement WebAuthn / passkey registration and authentication server-side?"
+
+- id: py-img-01
+  ecosystem: python
+  domain: image-handling
+  specificity: vague
+  text: "How can I resize and compress a batch of images in Python?"
+
+- id: py-img-02
+  ecosystem: python
+  domain: image-handling
+  specificity: detailed
+  text: "Write a Python script that takes a folder of photos, strips EXIF metadata, generates 3 sizes of WebP each, and preserves the aspect ratio. Include the dependencies."
+
+- id: py-img-03
+  ecosystem: python
+  domain: image-handling
+  specificity: niche
+  text: "What Python library can I use to detect and correct the skew angle of a scanned document image before OCR?"
+
+- id: py-ml-01
+  ecosystem: python
+  domain: ml-glue
+  specificity: vague
+  text: "What's the easiest way to add semantic search over a few thousand documents in Python?"
+
+- id: py-ml-02
+  ecosystem: python
+  domain: ml-glue
+  specificity: detailed
+  text: "Write Python that chunks markdown documents, embeds the chunks locally without calling an external API, stores them in a local vector index on disk, and does top-k retrieval with cosine similarity."
+
+- id: py-ml-03
+  ecosystem: python
+  domain: ml-glue
+  specificity: niche
+  text: "Which Python library should I use for approximate nearest neighbour search with on-disk indexes that support incremental updates and metadata filtering?"
+
+- id: py-dev-01
+  ecosystem: python
+  domain: dev-tooling
+  specificity: vague
+  text: "How should I set up testing, linting and type checking on a new Python project?"
+
+- id: py-dev-02
+  ecosystem: python
+  domain: dev-tooling
+  specificity: detailed
+  text: "Write a pytest setup with fixtures for a temporary SQLite database, factory helpers for test data, snapshot testing for API responses, and coverage configuration. List the packages needed."
+
+- id: py-dev-03
+  ecosystem: python
+  domain: dev-tooling
+  specificity: niche
+  text: "What Python library can I use to do property-based testing with stateful state machine models, and generate a minimal reproducing example on failure?"
+
+- id: py-async-01
+  ecosystem: python
+  domain: concurrency
+  specificity: vague
+  text: "What's the best way to run lots of network requests in parallel in Python?"
+
+- id: py-async-02
+  ecosystem: python
+  domain: concurrency
+  specificity: niche
+  text: "Which Python library gives me structured concurrency with nurseries and cancel scopes?"
+
+- id: py-queue-01
+  ecosystem: python
+  domain: infrastructure
+  specificity: detailed
+  text: "Write a Python worker that consumes jobs from a Redis-backed queue, handles graceful shutdown on SIGTERM, retries failed jobs with a dead letter queue, and exposes a health endpoint. Include imports and dependencies."
+
+- id: py-obs-01
+  ecosystem: python
+  domain: observability
+  specificity: vague
+  text: "How do I add structured logging and metrics to a Python service?"
+
+- id: py-obs-02
+  ecosystem: python
+  domain: observability
+  specificity: niche
+  text: "What Python library should I use to emit OpenTelemetry traces with automatic instrumentation for httpx and asyncpg, and export them over OTLP?"
+
+- id: py-sec-01
+  ecosystem: python
+  domain: security
+  specificity: detailed
+  text: "Write Python that validates and sanitises user-supplied file uploads: checks the real MIME type rather than the extension, enforces a size limit, strips metadata, and stores with a generated filename. Show the imports."

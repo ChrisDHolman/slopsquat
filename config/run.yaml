@@ -1,0 +1,44 @@
+# Run parameters.
+
+# How many times each prompt is sent to each model.
+#
+# Recurrence across runs is the headline metric, so this is the most important number
+# here. At N=10 a name appearing twice is hard to distinguish from chance; N=20 gives
+# a far more defensible "recurs in X% of runs" claim. Cost scales linearly and is low
+# (a full 45-prompt sweep is single-digit pounds per model), so prefer more runs.
+runs_per_prompt: 20
+
+concurrency:
+  # Parallel in-flight model calls. Keep modest — provider rate limits, not local CPU,
+  # are the binding constraint.
+  models: 4
+  # Parallel registry lookups. PyPI and npm are shared public infrastructure; this is
+  # deliberately conservative.
+  registry: 8
+
+# Seconds between registry requests per host, on top of the concurrency cap.
+registry_delay_seconds: 0.1
+
+retries:
+  model_calls: 2
+  registry_calls: 3
+
+paths:
+  raw: out/runs.jsonl
+  cache: out/registry-cache
+  report: out/report.md
+  csv: out/recurrence.csv
+
+# Which ecosystems to include. Prompts are tagged, so this filters the corpus.
+ecosystems:
+  - python
+  - javascript
+
+# Registry endpoints. Overridable for testing against a local mock.
+registries:
+  pypi: "https://pypi.org/pypi/{name}/json"
+  npm: "https://registry.npmjs.org/{name}"
+
+# Identifies the harness to the registries. Keep the URL accurate — it is how a
+# registry operator contacts us if our traffic is a problem.
+user_agent: "slopsquat-research/0.1 (+https://github.com/ChrisDHolman/slopsquat)"

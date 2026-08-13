@@ -1,0 +1,25 @@
+# Secrets — never commit
+.env
+
+# Run outputs: raw records, caches, generated reports.
+# The dataset is published deliberately, not by accident.
+out/
+*.duckdb
+*.duckdb.wal
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+dist/
+build/
+.pytest_cache/
+.ruff_cache/
+
+# Editors / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
