@@ -98,3 +98,4 @@ aliases:
   docx: python-docx
   pptx: python-pptx
   fitz: pymupdf
+  pythonjsonlogger: python-json-logger

@@ -14,7 +14,7 @@ Definitions, applied consistently and printed in the report so a reader can audi
   and denominator: a network failure is not evidence either way.
 * **hallucination** — a checkable mention with status ``not_found``.
 * **needs-review** — a Python hallucination whose import name was never mapped to a
-  distribution name (``alias_resolved = false``). It is genuinely ambiguous between an
+  distribution name (``alias_resolved IS FALSE``). It is genuinely ambiguous between an
   invented name and a real project with a differing distribution name, so it is reported
   separately rather than silently counted.
 
@@ -131,21 +131,27 @@ def analyse(runs_path: Path, registry_path: Path) -> Report:
             count(*) AS mentions,
             count(DISTINCT name) AS distinct_names,
             count(*) FILTER (WHERE status IN ('exists','not_found')) AS checkable,
-            count(*) FILTER (WHERE status='not_found') AS halluc_mentions,
-            count(DISTINCT name) FILTER (WHERE status='not_found') AS distinct_halluc
+            count(*) FILTER (WHERE status='not_found'
+              AND NOT (ecosystem='python' AND alias_resolved IS FALSE)) AS confirmed,
+            count(*) FILTER (WHERE status='not_found'
+              AND ecosystem='python' AND alias_resolved IS FALSE) AS review,
+            count(DISTINCT name) FILTER (WHERE status='not_found'
+              AND NOT (ecosystem='python' AND alias_resolved IS FALSE)) AS distinct_confirmed
           FROM m GROUP BY model_id
         )
         SELECT resp.model_id, resp.ok_responses,
                COALESCE(agg.mentions,0), COALESCE(agg.distinct_names,0),
-               COALESCE(agg.checkable,0), COALESCE(agg.halluc_mentions,0),
-               COALESCE(agg.distinct_halluc,0), COALESCE(halluc_resp.n,0)
+               COALESCE(agg.checkable,0), COALESCE(agg.confirmed,0),
+               COALESCE(agg.review,0), COALESCE(agg.distinct_confirmed,0),
+               COALESCE(halluc_resp.n,0)
         FROM resp
         LEFT JOIN agg USING(model_id)
         LEFT JOIN halluc_resp USING(model_id)
         ORDER BY resp.model_id
         """
     ).fetchall()
-    for (mid, ok_resp, mentions, distinct_names, checkable, halluc, distinct_h, h_resp) in rows:
+    for (mid, ok_resp, mentions, distinct_names, checkable, confirmed, review,
+         distinct_c, h_resp) in rows:
         rep.per_model.append(
             {
                 "model_id": mid,
@@ -153,22 +159,27 @@ def analyse(runs_path: Path, registry_path: Path) -> Report:
                 "mentions": mentions,
                 "distinct_names": distinct_names,
                 "checkable": checkable,
-                "halluc_mentions": halluc,
-                "distinct_halluc": distinct_h,
-                "mention_rate": (halluc / checkable) if checkable else None,
+                "confirmed": confirmed,
+                "needs_review": review,
+                "distinct_confirmed": distinct_c,
+                # Headline rate counts only CONFIRMED hallucinations. Ambiguous
+                # needs-review names (unmapped Python 404s) are reported separately so
+                # the published number is a defensible lower bound, not an inflated one.
+                "confirmed_rate": (confirmed / checkable) if checkable else None,
                 "responses_with_halluc": h_resp,
                 "response_rate": (h_resp / ok_resp) if ok_resp else None,
             }
         )
 
     # --- by specificity (niche is reported separately by construction) --------------
-    for (spec, checkable, halluc, dn, dh) in c.execute(
+    for (spec, checkable, confirmed, review) in c.execute(
         """
         SELECT specificity,
                count(*) FILTER (WHERE status IN ('exists','not_found')) AS checkable,
-               count(*) FILTER (WHERE status='not_found') AS halluc,
-               count(DISTINCT name) AS distinct_names,
-               count(DISTINCT name) FILTER (WHERE status='not_found') AS distinct_halluc
+               count(*) FILTER (WHERE status='not_found'
+                 AND NOT (ecosystem='python' AND alias_resolved IS FALSE)) AS confirmed,
+               count(*) FILTER (WHERE status='not_found'
+                 AND ecosystem='python' AND alias_resolved IS FALSE) AS review
         FROM m GROUP BY specificity ORDER BY specificity
         """
     ).fetchall():
@@ -176,10 +187,9 @@ def analyse(runs_path: Path, registry_path: Path) -> Report:
             {
                 "specificity": spec,
                 "checkable": checkable,
-                "halluc_mentions": halluc,
-                "mention_rate": (halluc / checkable) if checkable else None,
-                "distinct_names": dn,
-                "distinct_halluc": dh,
+                "confirmed": confirmed,
+                "needs_review": review,
+                "confirmed_rate": (confirmed / checkable) if checkable else None,
             }
         )
 
@@ -207,7 +217,7 @@ def analyse(runs_path: Path, registry_path: Path) -> Report:
         SELECT me.model_id, me.prompt_id, me.ecosystem, me.name,
                count(DISTINCT me.run_index) AS appearances,
                cr.runs AS runs,
-               (me.ecosystem='python' AND bool_or(me.alias_resolved = false)) AS needs_review
+               (me.ecosystem='python' AND bool_or(me.alias_resolved IS FALSE)) AS needs_review
         FROM m me JOIN cell_runs cr USING (model_id, prompt_id)
         WHERE me.status='not_found'
         GROUP BY me.model_id, me.prompt_id, me.ecosystem, me.name, cr.runs
@@ -299,28 +309,29 @@ def render_markdown(rep: Report) -> str:
 
     lines.append("## Per model\n")
     lines.append(
-        "| model | ok responses | mentions | checkable | halluc | mention rate | "
-        "distinct halluc | responses w/ halluc | response rate |\n"
-        "|---|--:|--:|--:|--:|--:|--:|--:|--:|\n"
+        "*Confirmed rate is the headline: it excludes ambiguous needs-review names.*\n\n"
+        "| model | ok responses | checkable | confirmed | confirmed rate | "
+        "distinct confirmed | needs review | response rate |\n"
+        "|---|--:|--:|--:|--:|--:|--:|--:|\n"
     )
     for r in rep.per_model:
         lines.append(
-            f"| {r['model_id']} | {r['ok_responses']} | {r['mentions']} | "
-            f"{r['checkable']} | {r['halluc_mentions']} | {_pct(r['mention_rate'])} | "
-            f"{r['distinct_halluc']} | {r['responses_with_halluc']} | "
+            f"| {r['model_id']} | {r['ok_responses']} | {r['checkable']} | "
+            f"{r['confirmed']} | {_pct(r['confirmed_rate'])} | "
+            f"{r['distinct_confirmed']} | {r['needs_review']} | "
             f"{_pct(r['response_rate'])} |\n"
         )
 
     lines.append("\n## By specificity\n")
     lines.append("*Niche prompts target obscure libraries and inflate the rate by design.*\n\n")
     lines.append(
-        "| specificity | checkable | halluc | mention rate | distinct halluc |\n"
+        "| specificity | checkable | confirmed | confirmed rate | needs review |\n"
         "|---|--:|--:|--:|--:|\n"
     )
     for r in rep.by_specificity:
         lines.append(
-            f"| {r['specificity']} | {r['checkable']} | {r['halluc_mentions']} | "
-            f"{_pct(r['mention_rate'])} | {r['distinct_halluc']} |\n"
+            f"| {r['specificity']} | {r['checkable']} | {r['confirmed']} | "
+            f"{_pct(r['confirmed_rate'])} | {r['needs_review']} |\n"
         )
 
     lines.append("\n## By ecosystem\n")
@@ -398,13 +409,13 @@ def write_charts(rep: Report, out_dir: Path) -> list[Path]:
     out_dir.mkdir(parents=True, exist_ok=True)
     written: list[Path] = []
 
-    model_rows = [r for r in rep.per_model if r["mention_rate"] is not None]
+    model_rows = [r for r in rep.per_model if r["confirmed_rate"] is not None]
     if model_rows:
         fig, ax = plt.subplots(figsize=(7, 4))
         ax.bar([r["model_id"] for r in model_rows],
-               [100 * r["mention_rate"] for r in model_rows], color="#c0392b")
-        ax.set_ylabel("hallucination rate (%)")
-        ax.set_title("Hallucination rate by model")
+               [100 * r["confirmed_rate"] for r in model_rows], color="#c0392b")
+        ax.set_ylabel("confirmed hallucination rate (%)")
+        ax.set_title("Confirmed hallucination rate by model")
         ax.tick_params(axis="x", rotation=30)
         fig.tight_layout()
         p = out_dir / "rate_by_model.png"
@@ -412,13 +423,13 @@ def write_charts(rep: Report, out_dir: Path) -> list[Path]:
         plt.close(fig)
         written.append(p)
 
-    spec_rows = [r for r in rep.by_specificity if r["mention_rate"] is not None]
+    spec_rows = [r for r in rep.by_specificity if r["confirmed_rate"] is not None]
     if spec_rows:
         fig, ax = plt.subplots(figsize=(6, 4))
         ax.bar([r["specificity"] for r in spec_rows],
-               [100 * r["mention_rate"] for r in spec_rows], color="#e67e22")
-        ax.set_ylabel("hallucination rate (%)")
-        ax.set_title("Hallucination rate by prompt specificity")
+               [100 * r["confirmed_rate"] for r in spec_rows], color="#e67e22")
+        ax.set_ylabel("confirmed hallucination rate (%)")
+        ax.set_title("Confirmed hallucination rate by prompt specificity")
         fig.tight_layout()
         p = out_dir / "rate_by_specificity.png"
         fig.savefig(p, dpi=120)

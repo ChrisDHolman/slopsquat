@@ -74,15 +74,18 @@ def test_totals(dataset) -> None:
     }
 
 
-def test_per_model_rates_exclude_errors(dataset) -> None:
+def test_per_model_rates_exclude_errors_and_split_confirmed(dataset) -> None:
     rep = analyse(*dataset)
     (m,) = rep.per_model
     assert m["ok_responses"] == 3
     assert m["mentions"] == 5
     assert m["checkable"] == 4  # flakey (error) excluded
-    assert m["halluc_mentions"] == 3  # ghostpkg x2 + mysteryimport
-    assert m["distinct_halluc"] == 2
-    assert m["mention_rate"] == pytest.approx(3 / 4)
+    # ghostpkg x2 are confirmed; mysteryimport (unmapped python 404) is needs-review.
+    assert m["confirmed"] == 2
+    assert m["needs_review"] == 1
+    assert m["distinct_confirmed"] == 1
+    # Headline rate counts only confirmed, not the ambiguous needs-review name.
+    assert m["confirmed_rate"] == pytest.approx(2 / 4)
     assert m["responses_with_halluc"] == 3
     assert m["response_rate"] == pytest.approx(1.0)
 
@@ -133,6 +136,7 @@ def test_markdown_and_csv_render(dataset, tmp_path) -> None:
     rep = analyse(*dataset)
     md = render_markdown(rep)
     assert "# Slopsquat results" in md
+    assert "confirmed rate" in md
     assert "ghostpkg" in md
     csv_path = tmp_path / "rec.csv"
     write_csv(rep, csv_path)

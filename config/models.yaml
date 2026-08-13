@@ -25,7 +25,10 @@ models:
     model: claude-opus-5
     enabled: true
     params:
-      max_tokens: 8192
+      # 16384: the validation pass truncated 29% of Opus responses at 8192 — at effort
+      # high its thinking + answer routinely exceeds 4.5k output tokens, and a truncated
+      # answer drops packages, biasing the rate downward. Sized from the observed p50.
+      max_tokens: 16384
       # Opus 5 thinks by default; "adaptive" states that explicitly. Set to "disabled"
       # (allowed only at effort high or below) to measure the no-reasoning condition.
       thinking: adaptive
@@ -36,7 +39,7 @@ models:
     model: claude-sonnet-5
     enabled: true
     params:
-      max_tokens: 8192
+      max_tokens: 12288  # 8% truncation at 8192 in validation; headroom added
       thinking: adaptive
       effort: high
 

@@ -606,6 +606,39 @@ def _resolve_existence(run_cfg, out_path, console) -> None:
 
 
 @app.command()
+def reextract() -> None:
+    """Re-parse stored responses in runs.jsonl, rebuilding package lists. No API calls.
+
+    Use after improving the extractor: because full responses are stored, extraction can
+    be corrected for free instead of re-running the (paid) sweep. Re-run the existence
+    pass afterwards so registry.jsonl matches the corrected names.
+    """
+    from slopsquat.pipeline import reextract as run_reextract
+
+    try:
+        run_cfg = load_run_config()
+        aliases = load_aliases()
+        stdlib = {lang: load_stdlib(lang) for lang in ("python", "javascript")}
+    except ConfigError as exc:
+        console.print(f"[red]config error:[/red] {exc}")
+        raise typer.Exit(1) from exc
+
+    runs_path = run_cfg.paths["raw"]
+    if not runs_path.exists():
+        console.print(f"[red]no run data at[/red] {runs_path}")
+        raise typer.Exit(1)
+
+    stats = run_reextract(runs_path, stdlib, aliases)
+    console.print(
+        f"re-extracted {stats['records']} record(s): "
+        f"{stats['changed']} changed, "
+        f"packages {stats['packages_before']} → {stats['packages_after']}"
+    )
+    console.print("[dim]now re-run the existence pass so registry.jsonl matches.[/dim]")
+    _resolve_existence(run_cfg, runs_path, console)
+
+
+@app.command()
 def report(
     charts: bool = typer.Option(False, help="Also render PNG charts (needs matplotlib)."),
     top: int = typer.Option(20, help="How many recurring hallucinations to print."),
@@ -644,31 +677,40 @@ def report(
         f"{t['truncated']} truncated\n"
     )
 
-    tbl = Table(show_header=True, header_style="bold", title="hallucination rate by model")
+    tbl = Table(
+        show_header=True, header_style="bold",
+        title="confirmed hallucination rate by model (needs-review excluded)",
+    )
     tbl.add_column("model")
     tbl.add_column("ok resp", justify="right")
     tbl.add_column("checkable", justify="right")
-    tbl.add_column("halluc", justify="right")
-    tbl.add_column("mention rate", justify="right")
+    tbl.add_column("confirmed", justify="right")
+    tbl.add_column("conf. rate", justify="right")
     tbl.add_column("distinct", justify="right")
+    tbl.add_column("review", justify="right")
     tbl.add_column("resp rate", justify="right")
     for r in rep.per_model:
-        mr = "—" if r["mention_rate"] is None else f"{100 * r['mention_rate']:.1f}%"
+        cr = "—" if r["confirmed_rate"] is None else f"{100 * r['confirmed_rate']:.1f}%"
         rr = "—" if r["response_rate"] is None else f"{100 * r['response_rate']:.1f}%"
         tbl.add_row(
             r["model_id"], str(r["ok_responses"]), str(r["checkable"]),
-            str(r["halluc_mentions"]), mr, str(r["distinct_halluc"]), rr,
+            str(r["confirmed"]), cr, str(r["distinct_confirmed"]),
+            str(r["needs_review"]), rr,
         )
     console.print(tbl)
 
     spec = Table(show_header=True, header_style="bold", title="by specificity (niche inflates)")
     spec.add_column("specificity")
     spec.add_column("checkable", justify="right")
-    spec.add_column("halluc", justify="right")
-    spec.add_column("rate", justify="right")
+    spec.add_column("confirmed", justify="right")
+    spec.add_column("conf. rate", justify="right")
+    spec.add_column("review", justify="right")
     for r in rep.by_specificity:
-        mr = "—" if r["mention_rate"] is None else f"{100 * r['mention_rate']:.1f}%"
-        spec.add_row(r["specificity"], str(r["checkable"]), str(r["halluc_mentions"]), mr)
+        cr = "—" if r["confirmed_rate"] is None else f"{100 * r['confirmed_rate']:.1f}%"
+        spec.add_row(
+            r["specificity"], str(r["checkable"]), str(r["confirmed"]), cr,
+            str(r["needs_review"]),
+        )
     console.print(spec)
 
     rs = rep.recurrence_summary

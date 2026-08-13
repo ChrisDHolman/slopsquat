@@ -217,6 +217,27 @@ def test_refresh_bypasses_cache(tmp_path) -> None:
     assert calls["n"] == 2
 
 
+@pytest.mark.parametrize(
+    "name",
+    ['tabulate"', "enquirer'", "weird:name", "has space", "a<b>c", "pipe|name", "star*"],
+)
+def test_cache_never_crashes_on_filesystem_illegal_names(tmp_path, name) -> None:
+    """A model can emit anything. The cache must encode illegal characters, not raise —
+    a bad name is still a lookup to record, not a fatal error mid-sweep."""
+    from slopsquat.registry.cache import RegistryCache
+
+    cache = RegistryCache(tmp_path)
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(404)
+
+    # Should complete and persist without an OSError from an invalid filename.
+    asyncio.run(_check([name], "python", handler, cache=cache))
+    second = asyncio.run(_check([name], "python", handler, cache=cache))
+    assert second[0].from_cache is True
+    assert second[0].name == name
+
+
 def test_scoped_name_survives_cache_round_trip(tmp_path) -> None:
     """'@' and '/' are not safe in a filename; the cache must handle scoped packages."""
 

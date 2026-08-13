@@ -85,6 +85,10 @@ def package_root(specifier: str) -> str | None:
         parts = spec.split("/")
         if len(parts) < 2:
             return None  # bare `@foo` is not a valid scoped package
+        # `@/public/hero.jpg` and friends are build-tool path aliases (Vite/webpack
+        # `@/` -> project root), not packages: the scope segment is empty.
+        if parts[0] == "@" or not parts[1]:
+            return None
         return "/".join(parts[:2])
     return spec.split("/", 1)[0]
 

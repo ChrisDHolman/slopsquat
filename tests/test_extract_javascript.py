@@ -41,10 +41,32 @@ def names(result) -> set[str]:
         ("/absolute/path", None),
         ("https://esm.sh/react", None),
         ("@bare", None),
+        # Build-tool path aliases (empty scope) are not packages, a real regression.
+        ("@/public/hero.jpg", None),
+        ("@/components/Button", None),
     ],
 )
 def test_package_root(specifier: str, expected: str | None) -> None:
     assert package_root(specifier) == expected
+
+
+def test_install_comment_and_asides_are_not_packages() -> None:
+    """`npm i bufferutil utf-8-validate  # optional native speedups` must not yield
+    `speedups`; the CLI-subcommand comment `# ... can-i-deploy` must not leak either."""
+    result = run(
+        "```bash\n"
+        "npm install bufferutil utf-8-validate  # optional native speedups\n"
+        "npm i @pact-foundation/pact-cli  # broker CLI: publish, can-i-deploy\n"
+        "```"
+    )
+    assert names(result) == {"bufferutil", "utf-8-validate", "@pact-foundation/pact-cli"}
+
+
+def test_install_flag_values_are_not_packages() -> None:
+    """A filename that is the value of a flag (`--output out.ndjson`) is not a package."""
+    result = run("```bash\nnode scrape.js --input urls.txt --output out.ndjson\n```")
+    assert "out.ndjson" not in names(result)
+    assert "urls.txt" not in names(result)
 
 
 # ---------------------------------------------------------------- import forms

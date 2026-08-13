@@ -235,6 +235,52 @@ def collect_unique_names(
     return {eco: sorted(names) for eco, names in by_eco.items()}
 
 
+def reextract(
+    runs_path: Path,
+    stdlib: dict[str, set[str]],
+    aliases: dict[str, str],
+) -> dict[str, int]:
+    """Re-run extraction over stored responses, rewriting each record's ``packages``.
+
+    The whole reason ``response_text`` is stored is so the cheap, improvable parsing step
+    can be corrected without re-spending on the models. This reads runs.jsonl, re-extracts
+    from each successful record's text, and writes the file back atomically. Failed
+    records are passed through untouched.
+
+    Returns counts of records processed and records whose package set changed.
+    """
+    if not runs_path.exists():
+        return {"records": 0, "changed": 0, "packages_before": 0, "packages_after": 0}
+
+    processed = changed = before = after = 0
+    tmp = runs_path.with_suffix(".jsonl.tmp")
+    with runs_path.open(encoding="utf-8") as src, tmp.open("w", encoding="utf-8") as dst:
+        for line in src:
+            line = line.strip()
+            if not line:
+                continue
+            rec = json.loads(line)
+            processed += 1
+            if rec.get("ok") and rec.get("response_text"):
+                before += len(rec.get("packages", []))
+                old = rec.get("packages", [])
+                result = run_extraction(
+                    rec["response_text"],
+                    ecosystem=rec.get("ecosystem"),
+                    stdlib=stdlib,
+                    aliases=aliases,
+                )
+                rec["packages"] = [p.to_dict() for p in result.packages]
+                rec["extraction_notes"] = list(result.notes)
+                after += len(rec["packages"])
+                if rec["packages"] != old:
+                    changed += 1
+            dst.write(json.dumps(rec, ensure_ascii=False) + "\n")
+    tmp.replace(runs_path)
+    return {"records": processed, "changed": changed,
+            "packages_before": before, "packages_after": after}
+
+
 def write_existence_snapshot(
     names_by_eco: dict[str, list[str]],
     out_path: Path,

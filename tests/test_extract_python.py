@@ -152,6 +152,34 @@ def test_multiple_packages_one_command() -> None:
     assert names(result) == {"fastapi", "uvicorn", "pydantic"}
 
 
+def test_install_inside_string_literal_does_not_leak_quote() -> None:
+    """A real regression: `pip install tqdm")` inside Python code produced the bogus
+    name `tqdm"`, which 404s and counts as a false hallucination. The quote and bracket
+    must be peeled, leaving the real name."""
+    result = run(
+        '```python\n'
+        'try:\n'
+        '    import tqdm\n'
+        'except ImportError:\n'
+        '    print("Install it with: pip install tqdm")\n'
+        '    sys.exit(1)\n'
+        '```'
+    )
+    assert "tqdm" in names(result)
+    assert not any('"' in n or "'" in n for n in names(result))
+
+
+def test_install_parenthetical_aside_is_not_packages() -> None:
+    """`pip install rich (or use requests)` must not yield `(or`, `use`, `requests`."""
+    result = run("```bash\npip install rich (or use requests instead)\n```")
+    assert names(result) == {"rich"}
+
+
+def test_names_with_stray_punctuation_are_rejected() -> None:
+    result = run("```bash\npip install 'tabulate\" tqdm')\n```")
+    assert all(n.replace("-", "").replace("_", "").replace(".", "").isalnum() for n in names(result))
+
+
 # ---------------------------------------------------------------- manifests
 
 

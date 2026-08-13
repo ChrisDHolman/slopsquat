@@ -202,9 +202,25 @@ PROSE_STOPWORDS = frozenset(
 )
 
 
+# The characters a published PyPI/npm name may contain (npm scopes handled separately).
+# After cleaning, anything outside this shape is an extraction artefact, not a package.
+_NAME_SHAPE_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]*")
+
+
 def clean_install_token(token: str) -> str | None:
-    """Reduce one install-command argument to a bare package name, or None to skip."""
-    token = token.strip().strip("'\"`,").rstrip(".)!?:")
+    """Reduce one install-command argument to a bare package name, or None to skip.
+
+    Wrapping quotes, backticks, commas, brackets, and trailing sentence punctuation are
+    peeled *repeatedly* until stable — an `install` command that appears inside a string
+    literal or a parenthetical in code otherwise leaks the delimiter into the name, e.g.
+    `pip install tqdm")` would become `tqdm"`. After cleaning, a token that still isn't
+    shaped like a package name is rejected rather than emitted as a false hallucination.
+    """
+    token = token.strip()
+    prev = None
+    while token != prev:
+        prev = token
+        token = token.strip("'\"`,()[]{}").strip().rstrip(".!?:;")
     if not token or INSTALL_FLAG_RE.match(token):
         return None
     # Local paths, URLs, and VCS installs are not registry packages.
@@ -216,9 +232,23 @@ def clean_install_token(token: str) -> str | None:
         if not rest:
             return None
         rest = SPEC_SPLIT_RE.split(rest)[0]
-        return f"{scope}/{rest}" if rest else None
+        if not rest or not _NAME_SHAPE_RE.fullmatch(rest):
+            return None
+        return f"{scope}/{rest}"
     name = SPEC_SPLIT_RE.split(token)[0]
-    return name or None
+    if not name or not _NAME_SHAPE_RE.fullmatch(name):
+        return None
+    return name
+
+
+# Flags whose *next* argument is a file, path, or URL — never a package name.
+# `pip install -r requirements.txt`, `node scrape.js --output out.ndjson`.
+_VALUE_FLAGS = frozenset(
+    {
+        "-r", "--requirement", "-c", "--constraint", "-o", "--output", "--input",
+        "-f", "--find-links", "-i", "--index-url", "--extra-index-url", "--input-file",
+    }
+)
 
 
 def install_tokens(arg_string: str, *, prose: bool) -> list[str]:
@@ -228,9 +258,26 @@ def install_tokens(arg_string: str, *, prose: bool) -> list[str]:
     In prose the command runs into the surrounding sentence, so consumption stops at the
     first ordinary English word — preferring a missed package over invented ones, since
     a false positive here is indistinguishable from a real hallucination downstream.
+
+    Guards learned from real model output: an inline `#` comment ends the package list,
+    a parenthetical aside ends it, and the argument following a file-valued flag
+    (`-r requirements.txt`) is a filename, not a package.
     """
     out: list[str] = []
+    skip_next = False
     for token in arg_string.split():
+        if skip_next:
+            skip_next = False
+            continue
+        # An inline comment ends the command: `npm i bufferutil  # native speedups`.
+        if token.startswith("#"):
+            break
+        # A parenthetical aside ends it: `pip install rich (or use requests)`.
+        if token.startswith("("):
+            break
+        if token in _VALUE_FLAGS:
+            skip_next = True
+            continue
         cleaned = clean_install_token(token)
         if cleaned is None:
             continue

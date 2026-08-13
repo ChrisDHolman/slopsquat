@@ -16,24 +16,33 @@ entry therefore records when it was checked, and negatives expire.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import time
 from dataclasses import asdict
 from pathlib import Path
 from typing import TYPE_CHECKING
+from urllib.parse import quote
 
 if TYPE_CHECKING:
     from slopsquat.registry import CheckResult
 
 
 def _safe_filename(ecosystem: str, name: str) -> str:
-    """Filesystem-safe cache key.
+    """Filesystem-safe cache key for an *arbitrary* name.
 
-    npm scoped names contain '@' and '/', neither of which is safe in a path. Names are
-    already lowercased by the caller, so a case-insensitive filesystem cannot collide
-    two distinct packages.
+    The name may be anything a model emitted — npm scopes (`@`, `/`) but also stray
+    quotes, colons, or other characters that are illegal in a Windows filename. Percent-
+    encoding everything outside a conservative safe set means the cache never crashes on
+    unexpected input (a bad name is still a lookup we want to record, not a fatal error).
+    Very long names are hashed to stay under the filesystem's per-component limit. Names
+    are lowercased by the caller, so a case-insensitive filesystem cannot collide two
+    distinct packages.
     """
-    encoded = name.replace("@", "%40").replace("/", "%2F")
+    encoded = quote(name, safe="")  # encodes @ / " : and everything else non-alphanumeric
+    if len(encoded) > 120:
+        digest = hashlib.sha1(name.encode("utf-8")).hexdigest()[:16]
+        encoded = encoded[:80] + "-" + digest
     return f"{ecosystem}__{encoded}.json"
 
 
