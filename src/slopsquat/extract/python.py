@@ -126,10 +126,14 @@ def _record(
         result.add_filtered("malformed", raw)
         return
 
+    # Standard-library names are filtered regardless of source: `pip install sqlite3`
+    # or a `sqlite3  # built-in` line in requirements is a real module that simply isn't
+    # a PyPI package — it 404s but is not a hallucination.
+    if raw in stdlib or raw == "__future__":
+        result.add_filtered("stdlib", raw)
+        return
+
     if is_import:
-        if raw in stdlib or raw == "__future__":
-            result.add_filtered("stdlib", raw)
-            return
         if raw in declared:
             result.add_filtered("declared_in_response", raw)
             return

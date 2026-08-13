@@ -11,7 +11,7 @@ import pytest
 from slopsquat.extract import extract
 from slopsquat.extract.python import normalise, top_level
 
-STDLIB = {"os", "sys", "json", "pathlib", "asyncio", "typing", "re", "csv", "logging"}
+STDLIB = {"os", "sys", "json", "pathlib", "asyncio", "typing", "re", "csv", "logging", "sqlite3"}
 ALIASES = {"cv2": "opencv-python", "PIL": "pillow", "yaml": "pyyaml", "bs4": "beautifulsoup4"}
 
 
@@ -178,6 +178,30 @@ def test_install_parenthetical_aside_is_not_packages() -> None:
 def test_names_with_stray_punctuation_are_rejected() -> None:
     result = run("```bash\npip install 'tabulate\" tqdm')\n```")
     assert all(n.replace("-", "").replace("_", "").replace(".", "").isalnum() for n in names(result))
+
+
+def test_stdlib_in_requirements_is_not_a_hallucination() -> None:
+    """A `sqlite3  # built-in` line is a real stdlib module, not a pip package."""
+    result = run("```requirements\nfastapi==0.110\nsqlite3  # built-in\n```")
+    assert "sqlite3" not in names(result)
+    assert "fastapi" in names(result)
+
+
+def test_stdlib_in_install_command_is_not_a_hallucination() -> None:
+    result = run("```bash\npip install sqlite3\n```")
+    assert "sqlite3" not in names(result)
+
+
+def test_numeric_and_filename_tokens_are_rejected() -> None:
+    result = run("```bash\npython scrape.py -t 20000 -o results.ndjson\n```")
+    assert "20000" not in names(result)
+    assert "scrape.py" not in names(result)
+    assert "results.ndjson" not in names(result)
+
+
+def test_tutorial_placeholder_is_not_a_package() -> None:
+    result = run("```bash\npip install mytool\n```")
+    assert "mytool" not in names(result)
 
 
 # ---------------------------------------------------------------- manifests

@@ -206,6 +206,26 @@ PROSE_STOPWORDS = frozenset(
 # After cleaning, anything outside this shape is an extraction artefact, not a package.
 _NAME_SHAPE_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]*")
 
+# A token ending in one of these is a filename, not a package (scrape.js, urls.txt).
+# `.yaml`/`.yml` are deliberately absent: real distributions (ruamel.yaml) end that way.
+_FILE_EXTS = frozenset(
+    {
+        "js", "mjs", "cjs", "jsx", "ts", "tsx", "py", "rb", "go", "rs", "java",
+        "sh", "json", "ndjson", "txt", "md", "html", "css", "lock", "cfg", "ini",
+        "log", "csv", "png", "jpg", "svg",
+    }
+)
+
+# Generic tutorial placeholders — the model saying "substitute your own name", not
+# asserting a package exists. Never a real slopsquat target.
+_PLACEHOLDER_NAMES = frozenset(
+    {
+        "mytool", "my-tool", "mypackage", "my-package", "mymodule", "my-module",
+        "myapp", "my-app", "myproject", "my-project", "yourpackage", "your-package",
+        "packagename", "package-name", "your-module", "your-app",
+    }
+)
+
 
 def clean_install_token(token: str) -> str | None:
     """Reduce one install-command argument to a bare package name, or None to skip.
@@ -237,6 +257,15 @@ def clean_install_token(token: str) -> str | None:
         return f"{scope}/{rest}"
     name = SPEC_SPLIT_RE.split(token)[0]
     if not name or not _NAME_SHAPE_RE.fullmatch(name):
+        return None
+    low = name.lower()
+    # A filename is not a package (`scrape.js`, `urls.txt`).
+    if "." in name and low.rsplit(".", 1)[-1] in _FILE_EXTS:
+        return None
+    # A purely numeric token is a flag value (`-t 20000`), never a package name.
+    if not any(ch.isalpha() for ch in name):
+        return None
+    if low in _PLACEHOLDER_NAMES:
         return None
     return name
 
